@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minesweeper Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            flex-direction: column;
+        }
+        #minesweeper {
+            display: grid;
+            gap: 2px;
+        }
+        .cell {
+            width: 30px;
+            height: 30px;
+            background-color: #ddd;
+            text-align: center;
+            line-height: 30px;
+            cursor: pointer;
+            user-select: none;
+            border: 1px solid #aaa;
+        }
+        .cell.revealed {
+            background-color: #bbb;
+            cursor: default;
+        }
+        .cell.mine {
+            background-color: red;
+        }
+        .cell.flagged {
+            background-color: #ffa500;
+        }
+    </style>
+<script>
+        let audioContext;
+        function unlockAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const emptySource = audioContext.createBufferSource();
+                emptySource.buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
+                emptySource.connect(audioContext.destination);
+                emptySource.start(0);
+            }
+        }
+        document.addEventListener('click', unlockAudio, { once: true });
+    </script>
+</head>
+<body>
+    <div>
+        <label for="colsInput">Number of Horizontal Grids (Columns): </label>
+        <input type="number" id="colsInput" value="30" min="5" max="50">
+        <label for="rowsInput">Number of Vertical Grids (Rows): </label>
+        <input type="number" id="rowsInput" value="16" min="5" max="30">
+        <label for="minesInput">Percentage of Mines: </label>
+        <input type="number" id="minesInput" value="15" min="5" max="50">
+        <button onclick="startGame()">Start Game</button>
+    </div>
+    <div id="minesweeper"></div>
+
+    <script>
+        let rows;
+        let cols;
+        let minesCount;
+        const minesweeper = document.getElementById('minesweeper');
+        let grid = [];
+
+        function startGame() {
+            document.removeEventListener('click', unlockAudio, { once: true });
+            rows = parseInt(document.getElementById('rowsInput').value);
+            cols = parseInt(document.getElementById('colsInput').value);
+            const minesPercentage = parseInt(document.getElementById('minesInput').value);
+            minesCount = Math.floor((rows * cols * minesPercentage) / 100);
+
+            // Clear previous grid
+            minesweeper.innerHTML = '';
+            minesweeper.style.gridTemplateColumns = `repeat(${cols}, 30px)`;
+            grid = [];
+
+            createGrid();
+            placeMines();
+            calculateAdjacentMines();
+        }
+
+        function createGrid() {
+            for (let r = 0; r < rows; r++) {
+                grid[r] = [];
+                for (let c = 0; c < cols; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.addEventListener('click', handleCellClick);
+                    minesweeper.appendChild(cell);
+                    grid[r][c] = {
+                        element: cell,
+                        isMine: false,
+                        isRevealed: false,
+                        isFlagged: false,
+                        adjacentMines: 0
+                    };
+                }
+            }
+        }
+
+        function placeMines() {
+            let placedMines = 0;
+            while (placedMines < minesCount) {
+                const row = Math.floor(Math.random() * rows);
+                const col = Math.floor(Math.random() * cols);
+                if (!grid[row][col].isMine) {
+                    grid[row][col].isMine = true;
+                    placedMines++;
+                }
+            }
+        }
+
+        function calculateAdjacentMines() {
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (grid[r][c].isMine) continue;
+                    let count = 0;
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            const nr = r + dr;
+                            const nc = c + dc;
+                            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && grid[nr][nc].isMine) {
+                                count++;
+                            }
+                        }
+                    }
+                    grid[r][c].adjacentMines = count;
+                }
+            }
+        }
+
+        function handleCellClick(event) {
+            if (event.shiftKey) {
+                const row = parseInt(event.target.dataset.row);
+                const col = parseInt(event.target.dataset.col);
+                toggleFlag(row, col);
+            } else {
+                const row = parseInt(event.target.dataset.row);
+                const col = parseInt(event.target.dataset.col);
+                revealCell(row, col);
+                checkWin();
+            }
+        }
+
+        function toggleFlag(row, col) {
+            const cell = grid[row][col];
+            if (cell.isRevealed) return;
+            cell.isFlagged = !cell.isFlagged;
+            if (cell.isFlagged) {
+                cell.element.classList.add('flagged');
+                cell.element.textContent = 'F';
+            } else {
+                cell.element.classList.remove('flagged');
+                cell.element.textContent = '';
+            }
+        }
+
+        function revealCell(row, col) {
+            const cell = grid[row][col];
+            if (cell.isRevealed || cell.isFlagged) return;
+            cell.isRevealed = true;
+            cell.element.classList.add('revealed');
+            if (cell.isMine) {
+                cell.element.classList.add('mine');
+                playSound('lose'); alert('Game Over!');
+                alert('Game Over!');
+                revealAllMines();
+                return;
+            }
+            if (cell.adjacentMines > 0) {
+                cell.element.textContent = cell.adjacentMines;
+            } else {
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const nr = row + dr;
+                        const nc = col + dc;
+                        if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                            revealCell(nr, nc);
+                        }
+                    }
+                }
+            }
+        }
+
+        function revealAllMines() {
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (grid[r][c].isMine) {
+                        grid[r][c].element.classList.add('mine');
+                        grid[r][c].element.classList.add('revealed');
+                    }
+                }
+            }
+        }
+
+        function checkWin() {
+            let revealedCount = 0;
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (grid[r][c].isRevealed && !grid[r][c].isMine) {
+                        revealedCount++;
+                    }
+                }
+            }
+            if (revealedCount === rows * cols - minesCount) {
+                setTimeout(() => playSound('win'), 0);
+                alert("You're a winner!");
+            }
+        }
+
+        function playSound(result) {
+            let audio;
+            if (result === 'win') {
+                audio = new Audio('https://www.myinstants.com/media/sounds/congrats.mp3'); // Congratulations sound
+            } else if (result === 'lose') {
+                audio = new Audio('https://www.myinstants.com/media/sounds/sad-trombone.mp3'); // Sorry sound
+            }
+            audio.play().catch(error => {
+                console.error('Audio playback failed:', error);
+                if (audioContext && audioContext.state === 'suspended') {
+                    audioContext.resume().then(() => audio.play());
+                }
+            });
+        }
+
+        
+    </script>
+</body>
+</html>
